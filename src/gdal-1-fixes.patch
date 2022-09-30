@@ -3,30 +3,23 @@ This file is part of MXE. See LICENSE.md for licensing information.
 Contains ad hoc patches for cross building.
 
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: brodieG <brodieG@users.noreply.github.com>
+Date: Fri, 23 Sep 2022 11:08:31 +0000
+Subject: [PATCH 1/5] Detect spatialite more effectively
+
+than just checking for headers in the system paths. Originally
 From: Luke Potgieter <fried.roadkill+ght@gmail.com>
 Date: Tue, 29 Aug 2017 16:31:09 +0200
-Subject: [PATCH 1/3] Detect spatialite more effectively than just checking for
- headers in the system paths. PostgreSQL detection requires -lpthread when
- building statically.
-
+and adapted for new gdal version
 
 diff --git a/configure.ac b/configure.ac
 index 1111111..2222222 100644
 --- a/configure.ac
 +++ b/configure.ac
-@@ -1124,7 +1124,7 @@ else
- 
-   AC_MSG_RESULT([yes])
- 
--  AC_CHECK_LIB(pq,PQconnectdb,HAVE_PG=yes,HAVE_PG=no,-L`$PG_CONFIG --libdir`)
-+  AC_CHECK_LIB(pq,PQconnectdb,HAVE_PG=yes,HAVE_PG=no,-L`$PG_CONFIG --libdir` -lpthread)
- 
-   if test "${HAVE_PG}" = "yes" ; then
-     LIBS=-L`$PG_CONFIG --libdir`" -lpq $LIBS"
-@@ -3598,16 +3598,21 @@ AC_ARG_WITH(spatialite-soname,
+@@ -1537,16 +1537,24 @@ AC_ARG_WITH(spatialite-soname,
+     ,,)
  
  HAVE_SPATIALITE=no
- SPATIALITE_AMALGAMATION=no
 +HAVE_SPAT_PKG=no
  
  if test -z "$with_spatialite" -o "$with_spatialite" = "no"; then
@@ -39,11 +32,14 @@ index 1111111..2222222 100644
 -            AC_MSG_RESULT(found)
 +        #AC_MSG_CHECKING([for spatialite.h in /usr/include or /usr/local/include])
 +        #if test -f "/usr/include/spatialite.h" -o -f "/usr/local/include/spatialite.h"; then
++        PKG_PROG_PKG_CONFIG
 +        PKG_CHECK_MODULES(SPATIALITE, spatialite, [HAVE_SPAT_PKG=yes], [HAVE_SPAT_PKG=no])
++
 +        if test "$HAVE_SPAT_PKG" = "yes"; then
 +            OLD_LIBS="$LIBS"
 +            LIBS="$LIBS -lsqlite3 -lspatialite -lgeos_c -lgeos -lxml2 -liconv -llzma -lproj -lstdc++ -lws2_32 -lm -lz"
-             AC_CHECK_LIB(spatialite,spatialite_init,SPATIALITE_INIT_FOUND=yes,SPATIALITE_INIT_FOUND=no,)
+             AC_CHECK_LIB(spatialite,spatialite_init,SPATIALITE_INIT_FOUND=yes,SPATIALITE_INIT_FOUND=no,-lsqlite3)
++
 +            LIBS="$OLD_LIBS"
              if test "$SPATIALITE_INIT_FOUND" = "yes"; then
                  HAVE_SPATIALITE=yes
@@ -52,100 +48,402 @@ diff --git a/m4/geos.m4 b/m4/geos.m4
 index 1111111..2222222 100644
 --- a/m4/geos.m4
 +++ b/m4/geos.m4
-@@ -121,14 +121,14 @@ AC_DEFUN([GEOS_INIT],[
+@@ -124,7 +124,7 @@ AC_DEFUN([GEOS_INIT],[
  
        HAVE_GEOS="no"
  
 -      GEOS_LIBS="`${GEOS_CONFIG} --ldflags` -lgeos_c"
-+      GEOS_LIBS="`${GEOS_CONFIG} --clibs`"
++      GEOS_LIBS="`${GEOS_CONFIG} --static-clibs`"
        GEOS_CFLAGS="`${GEOS_CONFIG} --cflags`"
        GEOS_VERSION="`${GEOS_CONFIG} --version`"
  
-       ax_save_LIBS="${LIBS}"
--      LIBS=${GEOS_LIBS}
-+      LIBS="${LIBS} ${GEOS_LIBS}"
-       ax_save_CFLAGS="${CFLAGS}"
--      CFLAGS="${GEOS_CFLAGS}"
-+      CFLAGS="${CFLAGS} ${GEOS_CFLAGS}"
- 
-       AC_CHECK_LIB([geos_c],
-         [GEOSversion],
 
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Luke Potgieter <fried.roadkill+ght@gmail.com>
-Date: Tue, 26 Sep 2017 14:56:19 +0200
-Subject: [PATCH 2/3] Use the new proj dll version number for the latest proj.
-
-
-diff --git a/ogr/ogrct.cpp b/ogr/ogrct.cpp
-index 1111111..2222222 100644
---- a/ogr/ogrct.cpp
-+++ b/ogr/ogrct.cpp
-@@ -96,9 +96,9 @@ static bool      bProjLocaleSafe = false;
- // build) it can be named either way, so use PROJSO environment variable to
- // specify the right library name. By default assume that in Cygwin/MinGW all
- // components were built in the same way.
--#  define LIBNAME "libproj-9.dll"
-+#  define LIBNAME "libproj-12.dll"
- #elif defined(__CYGWIN__)
--#  define LIBNAME "cygproj-9.dll"
-+#  define LIBNAME "cygproj-12.dll"
- #elif defined(__APPLE__)
- #  define LIBNAME "libproj.dylib"
- #else
-
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Mark Brand <mabrand@mabrand.nl>
-Date: Sun, 3 Apr 2022 22:52:30 +0200
-Subject: [PATCH 3/3] detect openjpeg-2.5 in MXE
+From: brodieG <brodieG@users.noreply.github.com>
+Date: Fri, 23 Sep 2022 11:09:44 +0000
+Subject: [PATCH 2/5] Tweak netcdf detection
 
 
 diff --git a/configure.ac b/configure.ac
 index 1111111..2222222 100644
 --- a/configure.ac
 +++ b/configure.ac
-@@ -2540,11 +2540,11 @@ if test "$with_openjpeg" = "no" ; then
- elif test "$with_openjpeg" = "yes" -o "$with_openjpeg" = "" ; then
+@@ -2944,28 +2944,19 @@ else
+     NETCDF_VERSION=`$NETCDF_NCCONFIG --version`
+     NETCDF_PREFIX=`$NETCDF_NCCONFIG --prefix`
+     NETCDF_INCLUDEDIR=`$NETCDF_NCCONFIG --includedir`
+-    NETCDF_LIBS=`$NETCDF_NCCONFIG --libs`
+-    NETCDF_STATIC_LIBS=`$NETCDF_NCCONFIG --static --libs`
+-    STRIP_SYSTEM_LIBRARY_PATHS("${NETCDF_LIBS}")
+-    NETCDF_LIBS="$STRIPPED_LIBRARY_NAME"
++    NETCDF_LIBS=`$NETCDF_NCCONFIG --static --libs`
+     echo ""
+     AC_MSG_RESULT([ got version="$NETCDF_VERSION", prefix="$NETCDF_PREFIX",
+  libs="$NETCDF_LIBS", includedir="$NETCDF_INCLUDEDIR"])
  
+-    SAVED_LIBS="${LIBS}"
+-    LIBS="$NETCDF_LIBS"
+-    AC_CHECK_LIB([netcdf], [nc_open], [NETCDF_SETTING=yes], [NETCDF_SETTING=no],)
+-    if test "$NETCDF_SETTING" = "no" ; then
+-      unset ac_cv_lib_netcdf_nc_open
+-      LIBS="$NETCDF_STATIC_LIBS"
+-      AC_CHECK_LIB([netcdf], [nc_open], [NETCDF_SETTING=yes], [NETCDF_SETTING=no],)
+-    fi
+-    LIBS="${SAVED_LIBS}"
++    AC_CHECK_LIB([netcdf], [nc_open], [NETCDF_SETTING=yes], [NETCDF_SETTING=no], $NETCDF_LIBS)
  
--  AC_CHECK_HEADERS([openjpeg-2.3/openjpeg.h])
--  if test "$ac_cv_header_openjpeg_2_3_openjpeg_h" = "yes"; then
-+  AC_CHECK_HEADERS([openjpeg-2.5/openjpeg.h])
-+  if test "$ac_cv_header_openjpeg_2_5_openjpeg_h" = "yes"; then
-     AC_CHECK_LIB(openjp2,opj_stream_set_user_data_length,HAVE_OPENJPEG=yes,HAVE_OPENJPEG=no,)
-     if test "$HAVE_OPENJPEG" = "yes"; then
--        OPENJPEG_VERSION=20300
-+        OPENJPEG_VERSION=20500
-         LIBS="-lopenjp2 $LIBS"
+     if test "$NETCDF_SETTING" = "yes" ; then
+       EXTRA_INCLUDES="-I$NETCDF_INCLUDEDIR $EXTRA_INCLUDES"
+       NETCDF_ROOT=$NETCDF_PREFIX
+       LIBS="$NETCDF_LIBS $LIBS"
++    else
++      AC_MSG_ERROR("Netcdf via nc-config not working")
      fi
-   else
-@@ -2585,11 +2585,11 @@ else
-   elif test -r $with_openjpeg/include/openjpeg-2.2/openjpeg.h ; then
-     OPENJPEG_VERSION=20200
-     EXTRA_INCLUDES="-I$with_openjpeg/include $EXTRA_INCLUDES"
--  elif test -r $with_openjpeg/include/openjpeg-2.3/openjpeg.h ; then
--    OPENJPEG_VERSION=20300
-+  elif test -r $with_openjpeg/include/openjpeg-2.5/openjpeg.h ; then
-+    OPENJPEG_VERSION=20500
-     EXTRA_INCLUDES="-I$with_openjpeg/include $EXTRA_INCLUDES"
-   else
--    AC_MSG_ERROR([openjpeg.h not found in $with_openjpeg/include/openjpeg-2.0 or $with_openjpeg/include/openjpeg-2.1 or $with_openjpeg/include/openjpeg-2.2 or $with_openjpeg/include/openjpeg-2.3])
-+    AC_MSG_ERROR([openjpeg.h not found in $with_openjpeg/include/openjpeg-2.0 or $with_openjpeg/include/openjpeg-2.1 or $with_openjpeg/include/openjpeg-2.2 or $with_openjpeg/include/openjpeg-2.5])
-   fi
  
-   AC_CHECK_LIB(openjp2,opj_stream_set_user_data_length,HAVE_OPENJPEG=yes,HAVE_OPENJPEG=no,-L$with_openjpeg/lib)
-diff --git a/frmts/openjpeg/openjpegdataset.cpp b/frmts/openjpeg/openjpegdataset.cpp
+ dnl previous behavior without nc-config
+
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: brodieG <brodieG@users.noreply.github.com>
+Date: Fri, 23 Sep 2022 11:12:49 +0000
+Subject: [PATCH 3/5] remove setting of __MSVCRT_CERSION__ (from OCTAVE)
+
+Originally:
+From: Jeremy Drake <github@jdrake.com>
+
+Date: Mon, 18 Oct 2021 11:02:08 -0700
+
+Subject: [PATCH] gdal: don't define __MSVCRT_VERSION__
+https://hg.octave.org/mxe-octave/file/tip/src/gdal-2-ucrt.patch
+
+diff --git a/port/cpl_port.h b/port/cpl_port.h
 index 1111111..2222222 100644
---- a/frmts/openjpeg/openjpegdataset.cpp
-+++ b/frmts/openjpeg/openjpegdataset.cpp
-@@ -34,8 +34,8 @@
- #pragma clang diagnostic ignored "-Wdocumentation"
- #endif
+--- a/port/cpl_port.h
++++ b/port/cpl_port.h
+@@ -113,15 +113,6 @@
+ /*      MinGW stuff                                                     */
+ /* ==================================================================== */
  
--#if defined(OPENJPEG_VERSION) && OPENJPEG_VERSION >= 20300
--#include <openjpeg-2.3/openjpeg.h>
-+#if defined(OPENJPEG_VERSION) && OPENJPEG_VERSION >= 20500
-+#include <openjpeg-2.5/openjpeg.h>
- #elif defined(OPENJPEG_VERSION) && OPENJPEG_VERSION >= 20200
- #include <openjpeg-2.2/openjpeg.h>
- #elif defined(OPENJPEG_VERSION) && OPENJPEG_VERSION >= 20100
+-/* We need __MSVCRT_VERSION__ >= 0x0700 to have "_aligned_malloc" */
+-/* Latest versions of mingw32 define it, but with older ones, */
+-/* we need to define it manually */
+-#if defined(__MINGW32__)
+-#ifndef __MSVCRT_VERSION__
+-#define __MSVCRT_VERSION__ 0x0700
+-#endif
+-#endif
+-
+ /* Needed for std=c11 on Solaris to have strcasecmp() */
+ #if defined(GDAL_COMPILATION) && defined(__sun__) && (__STDC_VERSION__ + 0) >= 201112L && (_XOPEN_SOURCE + 0) < 600
+ #ifdef _XOPEN_SOURCE
+
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: brodieG <brodieG@users.noreply.github.com>
+Date: Fri, 23 Sep 2022 11:28:25 +0000
+Subject: [PATCH 4/5] extend wmain use to C apps
+
+The change is patterned on what is done for the CPP apps
+
+diff --git a/apps/commonutils.h b/apps/commonutils.h
+index 1111111..2222222 100644
+--- a/apps/commonutils.h
++++ b/apps/commonutils.h
+@@ -75,7 +75,44 @@ extern "C" int wmain( int argc, wchar_t ** argv_w, wchar_t ** /* envp */ );
+ #define MAIN_END
+ 
+ #endif // defined(WIN32)
+-#endif // defined(__cplusplus)
++#else // defined(__cplusplus) ----------------------------------
++
++#if defined(WIN32) && (defined(_MSC_VER) || defined(SUPPORTS_WMAIN))
++
++#include <wchar.h>
++#include <stdlib.h>
++#include "cpl_conv.h"
++#include "cpl_string.h"
++
++int wmain( int argc, wchar_t ** argv_w, wchar_t ** envp );
++
++#define MAIN_START(argc, argv) \
++  int wmain( int argc, wchar_t ** argv_w, wchar_t **envp ) \
++  { \
++    char **argv = (char**)(CPLCalloc(argc + 1, sizeof(char*))); \
++    { \
++      int i; \
++      for( i = 0; i < argc; i++ ) \
++      { \
++        argv[i] = CPLRecodeFromWChar( argv_w[i], CPL_ENC_UCS2, CPL_ENC_UTF8 ); \
++      } \
++    }
++
++// NOTE: memory will not be explicitly freed on exit/return from wmain()
++
++#define MAIN_END CSLDestroy(argv); \
++    return 0; \
++  }
++
++#else // defined(WIN32)
++
++#define MAIN_START(argc, argv) \
++    int main( int argc, char ** argv )
++
++#define MAIN_END
++
++#endif // defined(WIN32)
++#endif // (!__cplusplus__)
+ 
+ 
+ CPL_C_START
+diff --git a/apps/dumpoverviews.cpp b/apps/dumpoverviews.cpp
+index 1111111..2222222 100644
+--- a/apps/dumpoverviews.cpp
++++ b/apps/dumpoverviews.cpp
+@@ -31,6 +31,7 @@
+ #include "cpl_string.h"
+ #include "gdal_priv.h"
+ #include "ogr_spatialref.h"
++#include "commonutils.h"
+ 
+ CPL_CVSID("$Id$")
+ 
+@@ -51,7 +52,7 @@ static void Usage()
+ /*                                main()                                */
+ /************************************************************************/
+ 
+-int main( int argc, char ** argv )
++MAIN_START(argc, argv)
+ 
+ {
+     GDALAllRegister();
+@@ -180,6 +181,7 @@ int main( int argc, char ** argv )
+ 
+     return 0;
+ }
++MAIN_END
+ 
+ /************************************************************************/
+ /*                              DumpBand()                              */
+diff --git a/apps/gdal2ogr.c b/apps/gdal2ogr.c
+index 1111111..2222222 100644
+--- a/apps/gdal2ogr.c
++++ b/apps/gdal2ogr.c
+@@ -31,6 +31,7 @@
+ #include "ogr_api.h"
+ #include "ogr_srs_api.h"
+ #include "cpl_string.h"
++#include "commonutils.h"
+ 
+ CPL_CVSID("$Id$")
+ 
+@@ -73,7 +74,7 @@ void Usage()
+ /*                                main()                                */
+ /************************************************************************/
+ 
+-int main(int argc, char* argv[])
++MAIN_START(argc, argv)
+ {
+     const char     *pszFormat = "ESRI Shapefile";
+     char           *pszLayerName = NULL;
+@@ -337,3 +338,4 @@ int main(int argc, char* argv[])
+ 
+     return 0;
+ }
++MAIN_END
+\ No newline at end of file
+diff --git a/apps/gdalasyncread.cpp b/apps/gdalasyncread.cpp
+index 1111111..2222222 100644
+--- a/apps/gdalasyncread.cpp
++++ b/apps/gdalasyncread.cpp
+@@ -32,6 +32,7 @@
+ #include "gdal_version.h"
+ #include "gdal_priv.h"
+ #include "ogr_spatialref.h"
++#include "commonutils.h"
+ 
+ CPL_CVSID("$Id$")
+ 
+@@ -73,7 +74,7 @@ static void Usage()
+ /*                                main()                                */
+ /************************************************************************/
+ 
+-int main( int argc, char ** argv )
++MAIN_START(argc, argv)
+ 
+ {
+     GDALDatasetH        hSrcDS, hDstDS;
+@@ -558,3 +559,4 @@ int main( int argc, char ** argv )
+     GDALDumpOpenDatasets( stderr );
+     GDALDestroyDriverManager();
+ }
++MAIN_END
+diff --git a/apps/gdalflattenmask.c b/apps/gdalflattenmask.c
+index 1111111..2222222 100644
+--- a/apps/gdalflattenmask.c
++++ b/apps/gdalflattenmask.c
+@@ -29,6 +29,7 @@
+ #include "gdal.h"
+ #include "cpl_conv.h"
+ #include "cpl_string.h"
++#include "commonutils.h"
+ 
+ CPL_CVSID("$Id$")
+ 
+@@ -55,7 +56,7 @@ static void Usage()
+ /*                                main()                                */
+ /************************************************************************/
+ 
+-int main(int argc, char* argv[])
++MAIN_START(argc, argv)
+ {
+     const char* pszFormat = "GTiff";
+     const char* pszSrcFilename = NULL;
+@@ -338,3 +339,4 @@ int main(int argc, char* argv[])
+ 
+     return 0;
+ }
++MAIN_END
+diff --git a/apps/gdaltorture.cpp b/apps/gdaltorture.cpp
+index 1111111..2222222 100644
+--- a/apps/gdaltorture.cpp
++++ b/apps/gdaltorture.cpp
+@@ -29,6 +29,7 @@
+ #include "gdal.h"
+ #include "cpl_string.h"
+ #include "cpl_conv.h"
++#include "commonutils.h"
+ 
+ #include <cassert>
+ 
+@@ -237,7 +238,7 @@ static void ProcessTortureTarget( const char *pszTarget,
+ /*                                main()                                */
+ /************************************************************************/
+ 
+-int main( int argc, char **argv )
++MAIN_START(argc, argv)
+ {
+     GDALAllRegister();
+ 
+@@ -292,3 +293,4 @@ int main( int argc, char **argv )
+ 
+     return 0;
+ }
++MAIN_END
+\ No newline at end of file
+diff --git a/apps/gdalwarpsimple.c b/apps/gdalwarpsimple.c
+index 1111111..2222222 100644
+--- a/apps/gdalwarpsimple.c
++++ b/apps/gdalwarpsimple.c
+@@ -31,6 +31,7 @@
+ #include "gdal_alg.h"
+ #include "cpl_string.h"
+ #include "ogr_srs_api.h"
++#include "commonutils.h"
+ 
+ CPL_CVSID("$Id$")
+ 
+@@ -91,7 +92,7 @@ char *SanitizeSRS( const char *pszUserInput )
+ /*                                main()                                */
+ /************************************************************************/
+ 
+-int main( int argc, char ** argv )
++MAIN_START(argc, argv)
+ 
+ {
+     GDALDatasetH        hSrcDS, hDstDS;
+@@ -313,6 +314,7 @@ int main( int argc, char ** argv )
+ 
+     exit( 0 );
+ }
++MAIN_END
+ 
+ /************************************************************************/
+ /*                        GDALWarpCreateOutput()                        */
+diff --git a/apps/multireadtest.cpp b/apps/multireadtest.cpp
+index 1111111..2222222 100644
+--- a/apps/multireadtest.cpp
++++ b/apps/multireadtest.cpp
+@@ -30,6 +30,7 @@
+ #include "gdal_alg.h"
+ #include "cpl_multiproc.h"
+ #include "cpl_string.h"
++#include "commonutils.h"
+ #include <vector>
+ 
+ CPL_CVSID("$Id$")
+@@ -121,8 +122,7 @@ static void WorkerFunc( void *arg )
+ /*                                main()                                */
+ /************************************************************************/
+ 
+-int main( int argc, char ** argv )
+-
++MAIN_START(argc, argv)
+ {
+ /* -------------------------------------------------------------------- */
+ /*      Process arguments.                                              */
+@@ -254,3 +254,4 @@ int main( int argc, char ** argv )
+ 
+     return 0;
+ }
++MAIN_END
+diff --git a/apps/testreprojmulti.cpp b/apps/testreprojmulti.cpp
+index 1111111..2222222 100644
+--- a/apps/testreprojmulti.cpp
++++ b/apps/testreprojmulti.cpp
+@@ -32,6 +32,7 @@
+ #include "cpl_atomic_ops.h"
+ #include "cpl_multiproc.h"
+ #include "ogr_spatialref.h"
++#include "commonutils.h"
+ 
+ CPL_CVSID("$Id$")
+ 
+@@ -74,7 +75,7 @@ static void ReprojFunc(void* /* unused */)
+     }
+ }
+ 
+-int main(int argc, char* argv[])
++MAIN_START(argc, argv)
+ {
+     int nThreads = 2;
+ 
+@@ -119,3 +120,4 @@ int main(int argc, char* argv[])
+ 
+     return 0;
+ }
++MAIN_END
+diff --git a/configure.ac b/configure.ac
+index 1111111..2222222 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -5628,7 +5628,7 @@ case "${host_os}" in
+         rm -f testwmain*
+         if test $RETVAL -eq 0; then
+             AC_MSG_RESULT([yes])
+-            CXXFLAGS="$CXXFLAGS -DSUPPORTS_WMAIN"
++            CPPFLAGS="$CPPFLAGS -DSUPPORTS_WMAIN"
+             LDFLAGS="$LDFLAGS -municode"
+         else
+             AC_MSG_RESULT([no])
+
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: brodieG <brodieG@users.noreply.github.com>
+Date: Sat, 24 Sep 2022 12:07:13 +0000
+Subject: [PATCH 5/5] bypass use of broken std::regex
+
+This will be fixed in GDAL 3.5.3
+https://github.com/OSGeo/gdal/pull/6359
+
+diff --git a/ogr/ogrsf_frmts/sqlite/ogrsqliteutility.cpp b/ogr/ogrsf_frmts/sqlite/ogrsqliteutility.cpp
+index 1111111..2222222 100644
+--- a/ogr/ogrsf_frmts/sqlite/ogrsqliteutility.cpp
++++ b/ogr/ogrsf_frmts/sqlite/ogrsqliteutility.cpp
+@@ -349,7 +349,9 @@ std::set<std::string> SQLGetUniqueFieldUCConstraints(sqlite3* poDb,
+     std::set<std::string> uniqueFieldsUC;
+ 
+     // std::regex in gcc < 4.9 is broken
+-#if !defined(__GNUC__) || defined(__clang__) || __GNUC__ >= 5
++    // still broken in newer gcc versions including gcc 10.3, will be fixed in
++    // gdal >= 3.5.3
++#if 0
+ 
+     try
+     {

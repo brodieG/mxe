@@ -40,4 +40,21 @@ define $(PKG)_BUILD
     $(MAKE) -C '$(1)'/mfhdf/libsrc -j '$(JOBS)' \
         LDFLAGS="-no-undefined -ldf"
     $(MAKE) -C '$(1)'/mfhdf/libsrc -j 1 install
+
+    # create pkg-config file
+    $(INSTALL) -d '$(PREFIX)/$(TARGET)/lib/pkgconfig'
+    (echo 'Name: $(PKG)'; \
+     echo 'Version: $($(PKG)_VERSION)'; \
+     echo 'Description: $($(PKG)_DESCR)'; \
+     echo 'Requires: libjpeg zlib'; \
+     echo 'Libs: -ldf'; \
+    ) > '$(PREFIX)/$(TARGET)/lib/pkgconfig/df.pc'
+    $(INSTALL) -d '$(PREFIX)/$(TARGET)/lib/pkgconfig'
+    (echo 'Name: $(PKG)'; \
+     echo 'Version: $($(PKG)_VERSION)'; \
+     echo 'Description: $($(PKG)_DESCR)'; \
+     echo 'Requires: df libjpeg zlib'; \
+     echo 'Libs: -lmfhdf'; \
+    ) > '$(PREFIX)/$(TARGET)/lib/pkgconfig/mfhdf.pc'
+
 endef

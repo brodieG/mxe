@@ -4,19 +4,20 @@ PKG             := gdal
 $(PKG)_WEBSITE  := https://www.gdal.org/
 $(PKG)_DESCR    := GDAL
 $(PKG)_IGNORE   :=
-$(PKG)_VERSION  := 2.2.4
-$(PKG)_CHECKSUM := 441eb1d1acb35238ca43a1a0a649493fc91fdcbab231d0747e9d462eea192278
+$(PKG)_VERSION  := 3.5.2
+$(PKG)_CHECKSUM := 0874dfdeb9ac42e53c37be4184b19350be76f0530e1f4fa8004361635b9030c2
 $(PKG)_SUBDIR   := gdal-$($(PKG)_VERSION)
 $(PKG)_FILE     := gdal-$($(PKG)_VERSION).tar.xz
 $(PKG)_URL      := https://download.osgeo.org/gdal/$($(PKG)_VERSION)/$($(PKG)_FILE)
 $(PKG)_DEPS     := cc armadillo curl expat geos giflib gta hdf4 hdf5 \
                    jpeg json-c libgeotiff libmysqlclient libpng libxml2 \
-                   netcdf openjpeg postgresql proj spatialite sqlite tiff zlib
+                   netcdf openjpeg postgresql proj spatialite sqlite tiff zlib \
+                   poppler freetype kealib
 
 define $(PKG)_UPDATE
-    $(WGET) -q -O- 'https://trac.osgeo.org/gdal/wiki/DownloadSource' | \
-    $(SED) -n 's,.*gdal-\([0-9][^>]*\)\.tar.*,\1,p' | \
-    head -1
+        $(WGET) -q -O- 'https://download.osgeo.org/gdal/' | \
+        $(SED) -n 's,.*title="\([0-9][^"]*\)".*,\1,p' | \
+        tail -1
 endef
 
 define $(PKG)_BUILD
@@ -28,6 +29,7 @@ define $(PKG)_BUILD
         --with-armadillo='$(PREFIX)/$(TARGET)' \
         --with-bsb \
         --with-cfitsio=no \
+        --with-curl='$(PREFIX)/$(TARGET)/bin/curl-config' \
         --with-dods-root=no \
         --with-dwgdirect=no \
         --with-ecw=no \
@@ -66,16 +68,19 @@ define $(PKG)_BUILD
         --with-perl=no \
         --with-php=no \
         --with-png='$(PREFIX)/$(TARGET)' \
+        --with-poppler=yes \
         --with-python=no \
         --with-sde=no \
         --with-spatialite=yes \
         --with-sqlite3='$(PREFIX)/$(TARGET)' \
         --with-threads=no \
         --with-xerces=no \
-        --with-xml2='$(PREFIX)/$(TARGET)/bin/xml2-config' \
-        --with-pg='$(PREFIX)/$(TARGET)/bin/pg_config' \
-        LIBS="-ljpeg -lsecur32 -lportablexdr `'$(TARGET)-pkg-config' --libs openssl libtiff-4 spatialite freexl armadillo`" \
-        CXXFLAGS="-Wno-deprecated-copy -Wno-class-memaccess $(if $(BUILD_STATIC),-DOPJ_STATIC,)" \
+        --with-xml2=yes \
+        --with-pg=yes \
+        --with-kea='$(PREFIX)/$(TARGET)/bin/kea-config' \
+        CXXFLAGS='-Wno-deprecated-copy -Wno-class-memaccess $(if $(BUILD_STATIC),-DOPJ_STATIC,) -D_WIN32_WINNT=0x0600 -O2' \
+        CFLAGS='-Wno-format -O2' \
+        LIBS="-ljpeg -lsecur32 -lportablexdr -lfreetype `'$(TARGET)-pkg-config' --libs --static openssl libtiff-4 spatialite freexl armadillo libcurl sqlite3`" \
         $(PKG_CONFIGURE_OPTS)
 
     $(MAKE) -C '$(1)'       -j '$(JOBS)' lib-target
