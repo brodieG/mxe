@@ -4,317 +4,8 @@ Contains ad hoc patches for cross building.
 
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: brodieG <brodieG@users.noreply.github.com>
-Date: Fri, 23 Sep 2022 11:12:49 +0000
-Subject: [PATCH 1/5] remove setting of __MSVCRT_CERSION__ (from OCTAVE)
-
-Originally:
-From: Jeremy Drake <github@jdrake.com>
-
-Date: Mon, 18 Oct 2021 11:02:08 -0700
-
-Subject: [PATCH] gdal: don't define __MSVCRT_VERSION__
-https://hg.octave.org/mxe-octave/file/tip/src/gdal-2-ucrt.patch
-
-diff --git a/port/cpl_port.h b/port/cpl_port.h
-index 1111111..2222222 100644
---- a/port/cpl_port.h
-+++ b/port/cpl_port.h
-@@ -113,15 +113,6 @@
- /*      MinGW stuff                                                     */
- /* ==================================================================== */
- 
--/* We need __MSVCRT_VERSION__ >= 0x0700 to have "_aligned_malloc" */
--/* Latest versions of mingw32 define it, but with older ones, */
--/* we need to define it manually */
--#if defined(__MINGW32__)
--#ifndef __MSVCRT_VERSION__
--#define __MSVCRT_VERSION__ 0x0700
--#endif
--#endif
--
- /* Needed for std=c11 on Solaris to have strcasecmp() */
- #if defined(GDAL_COMPILATION) && defined(__sun__) && (__STDC_VERSION__ + 0) >= 201112L && (_XOPEN_SOURCE + 0) < 600
- #ifdef _XOPEN_SOURCE
-
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: brodieG <brodieG@users.noreply.github.com>
-Date: Fri, 23 Sep 2022 11:28:25 +0000
-Subject: [PATCH 2/5] extend wmain use to C apps
-
-The change is patterned on what is done for the CPP apps
-
-diff --git a/apps/commonutils.h b/apps/commonutils.h
-index 1111111..2222222 100644
---- a/apps/commonutils.h
-+++ b/apps/commonutils.h
-@@ -75,7 +75,44 @@ extern "C" int wmain( int argc, wchar_t ** argv_w, wchar_t ** /* envp */ );
- #define MAIN_END
- 
- #endif // defined(WIN32)
--#endif // defined(__cplusplus)
-+#else // defined(__cplusplus) ----------------------------------
-+
-+#if defined(WIN32) && (defined(_MSC_VER) || defined(SUPPORTS_WMAIN))
-+
-+#include <wchar.h>
-+#include <stdlib.h>
-+#include "cpl_conv.h"
-+#include "cpl_string.h"
-+
-+int wmain( int argc, wchar_t ** argv_w, wchar_t ** envp );
-+
-+#define MAIN_START(argc, argv) \
-+  int wmain( int argc, wchar_t ** argv_w, wchar_t **envp ) \
-+  { \
-+    char **argv = (char**)(CPLCalloc(argc + 1, sizeof(char*))); \
-+    { \
-+      int i; \
-+      for( i = 0; i < argc; i++ ) \
-+      { \
-+        argv[i] = CPLRecodeFromWChar( argv_w[i], CPL_ENC_UCS2, CPL_ENC_UTF8 ); \
-+      } \
-+    }
-+
-+// NOTE: memory will not be explicitly freed on exit/return from wmain()
-+
-+#define MAIN_END CSLDestroy(argv); \
-+    return 0; \
-+  }
-+
-+#else // defined(WIN32)
-+
-+#define MAIN_START(argc, argv) \
-+    int main( int argc, char ** argv )
-+
-+#define MAIN_END
-+
-+#endif // defined(WIN32)
-+#endif // (!__cplusplus__)
- 
- 
- CPL_C_START
-diff --git a/apps/dumpoverviews.cpp b/apps/dumpoverviews.cpp
-index 1111111..2222222 100644
---- a/apps/dumpoverviews.cpp
-+++ b/apps/dumpoverviews.cpp
-@@ -31,6 +31,7 @@
- #include "cpl_string.h"
- #include "gdal_priv.h"
- #include "ogr_spatialref.h"
-+#include "commonutils.h"
- 
- CPL_CVSID("$Id$")
- 
-@@ -51,7 +52,7 @@ static void Usage()
- /*                                main()                                */
- /************************************************************************/
- 
--int main( int argc, char ** argv )
-+MAIN_START(argc, argv)
- 
- {
-     GDALAllRegister();
-@@ -180,6 +181,7 @@ int main( int argc, char ** argv )
- 
-     return 0;
- }
-+MAIN_END
- 
- /************************************************************************/
- /*                              DumpBand()                              */
-diff --git a/apps/gdal2ogr.c b/apps/gdal2ogr.c
-index 1111111..2222222 100644
---- a/apps/gdal2ogr.c
-+++ b/apps/gdal2ogr.c
-@@ -31,6 +31,7 @@
- #include "ogr_api.h"
- #include "ogr_srs_api.h"
- #include "cpl_string.h"
-+#include "commonutils.h"
- 
- CPL_CVSID("$Id$")
- 
-@@ -73,7 +74,7 @@ void Usage()
- /*                                main()                                */
- /************************************************************************/
- 
--int main(int argc, char* argv[])
-+MAIN_START(argc, argv)
- {
-     const char     *pszFormat = "ESRI Shapefile";
-     char           *pszLayerName = NULL;
-@@ -337,3 +338,4 @@ int main(int argc, char* argv[])
- 
-     return 0;
- }
-+MAIN_END
-\ No newline at end of file
-diff --git a/apps/gdalasyncread.cpp b/apps/gdalasyncread.cpp
-index 1111111..2222222 100644
---- a/apps/gdalasyncread.cpp
-+++ b/apps/gdalasyncread.cpp
-@@ -32,6 +32,7 @@
- #include "gdal_version.h"
- #include "gdal_priv.h"
- #include "ogr_spatialref.h"
-+#include "commonutils.h"
- 
- CPL_CVSID("$Id$")
- 
-@@ -73,7 +74,7 @@ static void Usage()
- /*                                main()                                */
- /************************************************************************/
- 
--int main( int argc, char ** argv )
-+MAIN_START(argc, argv)
- 
- {
-     GDALDatasetH        hSrcDS, hDstDS;
-@@ -558,3 +559,4 @@ int main( int argc, char ** argv )
-     GDALDumpOpenDatasets( stderr );
-     GDALDestroyDriverManager();
- }
-+MAIN_END
-diff --git a/apps/gdalflattenmask.c b/apps/gdalflattenmask.c
-index 1111111..2222222 100644
---- a/apps/gdalflattenmask.c
-+++ b/apps/gdalflattenmask.c
-@@ -29,6 +29,7 @@
- #include "gdal.h"
- #include "cpl_conv.h"
- #include "cpl_string.h"
-+#include "commonutils.h"
- 
- CPL_CVSID("$Id$")
- 
-@@ -55,7 +56,7 @@ static void Usage()
- /*                                main()                                */
- /************************************************************************/
- 
--int main(int argc, char* argv[])
-+MAIN_START(argc, argv)
- {
-     const char* pszFormat = "GTiff";
-     const char* pszSrcFilename = NULL;
-@@ -338,3 +339,4 @@ int main(int argc, char* argv[])
- 
-     return 0;
- }
-+MAIN_END
-diff --git a/apps/gdaltorture.cpp b/apps/gdaltorture.cpp
-index 1111111..2222222 100644
---- a/apps/gdaltorture.cpp
-+++ b/apps/gdaltorture.cpp
-@@ -29,6 +29,7 @@
- #include "gdal.h"
- #include "cpl_string.h"
- #include "cpl_conv.h"
-+#include "commonutils.h"
- 
- #include <cassert>
- 
-@@ -237,7 +238,7 @@ static void ProcessTortureTarget( const char *pszTarget,
- /*                                main()                                */
- /************************************************************************/
- 
--int main( int argc, char **argv )
-+MAIN_START(argc, argv)
- {
-     GDALAllRegister();
- 
-@@ -292,3 +293,4 @@ int main( int argc, char **argv )
- 
-     return 0;
- }
-+MAIN_END
-\ No newline at end of file
-diff --git a/apps/gdalwarpsimple.c b/apps/gdalwarpsimple.c
-index 1111111..2222222 100644
---- a/apps/gdalwarpsimple.c
-+++ b/apps/gdalwarpsimple.c
-@@ -31,6 +31,7 @@
- #include "gdal_alg.h"
- #include "cpl_string.h"
- #include "ogr_srs_api.h"
-+#include "commonutils.h"
- 
- CPL_CVSID("$Id$")
- 
-@@ -91,7 +92,7 @@ char *SanitizeSRS( const char *pszUserInput )
- /*                                main()                                */
- /************************************************************************/
- 
--int main( int argc, char ** argv )
-+MAIN_START(argc, argv)
- 
- {
-     GDALDatasetH        hSrcDS, hDstDS;
-@@ -313,6 +314,7 @@ int main( int argc, char ** argv )
- 
-     exit( 0 );
- }
-+MAIN_END
- 
- /************************************************************************/
- /*                        GDALWarpCreateOutput()                        */
-diff --git a/apps/multireadtest.cpp b/apps/multireadtest.cpp
-index 1111111..2222222 100644
---- a/apps/multireadtest.cpp
-+++ b/apps/multireadtest.cpp
-@@ -30,6 +30,7 @@
- #include "gdal_alg.h"
- #include "cpl_multiproc.h"
- #include "cpl_string.h"
-+#include "commonutils.h"
- #include <vector>
- 
- CPL_CVSID("$Id$")
-@@ -121,8 +122,7 @@ static void WorkerFunc( void *arg )
- /*                                main()                                */
- /************************************************************************/
- 
--int main( int argc, char ** argv )
--
-+MAIN_START(argc, argv)
- {
- /* -------------------------------------------------------------------- */
- /*      Process arguments.                                              */
-@@ -254,3 +254,4 @@ int main( int argc, char ** argv )
- 
-     return 0;
- }
-+MAIN_END
-diff --git a/apps/testreprojmulti.cpp b/apps/testreprojmulti.cpp
-index 1111111..2222222 100644
---- a/apps/testreprojmulti.cpp
-+++ b/apps/testreprojmulti.cpp
-@@ -32,6 +32,7 @@
- #include "cpl_atomic_ops.h"
- #include "cpl_multiproc.h"
- #include "ogr_spatialref.h"
-+#include "commonutils.h"
- 
- CPL_CVSID("$Id$")
- 
-@@ -74,7 +75,7 @@ static void ReprojFunc(void* /* unused */)
-     }
- }
- 
--int main(int argc, char* argv[])
-+MAIN_START(argc, argv)
- {
-     int nThreads = 2;
- 
-@@ -119,3 +120,4 @@ int main(int argc, char* argv[])
- 
-     return 0;
- }
-+MAIN_END
-
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: brodieG <brodieG@users.noreply.github.com>
 Date: Sat, 5 Nov 2022 23:59:32 +0000
-Subject: [PATCH 3/5] Apply vcpkg Module Find* Fixes
+Subject: [PATCH 1/5] Apply vcpkg Module Find* Fixes
 
 Taken from https://github.com/microsoft/vcpkg/pull/22392/commits
 
@@ -431,14 +122,14 @@ index 1111111..2222222 100644
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: brodieG <brodieG@users.noreply.github.com>
 Date: Sun, 6 Nov 2022 00:00:26 +0000
-Subject: [PATCH 4/5] Add/Fix Find* for HDF4 and PostgreSQL
+Subject: [PATCH 2/5] Add/Fix Find* for HDF4 and PostgreSQL
 
 
 diff --git a/cmake/modules/packages/FindHDF4.cmake b/cmake/modules/packages/FindHDF4.cmake
 index 1111111..2222222 100644
 --- a/cmake/modules/packages/FindHDF4.cmake
 +++ b/cmake/modules/packages/FindHDF4.cmake
-@@ -22,109 +22,54 @@ This module defines the following :prop_tgt:`IMPORTED` target:
+@@ -22,110 +22,54 @@ This module defines the following :prop_tgt:`IMPORTED` target:
  #]=======================================================================]
  #
  
@@ -516,7 +207,7 @@ index 1111111..2222222 100644
 -          set(_names_release ${tgt}alt ${tgt} hdf libhdf)
 -        else()
 -          set(_names_debug  ${tgt}altd ${tgt}d)
--          set(_names_release ${tgt}alt ${tgt})
+-          set(_names_release ${tgt}alt ${tgt} lib${tgt})
 -        endif()
 -        find_library(HDF4_${tgt}_LIBRARY_DEBUG
 -                     NAMES ${_names_debug}
@@ -527,17 +218,17 @@ index 1111111..2222222 100644
 -        select_library_configurations(HDF4_${tgt})
 -        mark_as_advanced(HDF4_${tgt}_LIBRARY HDF4_${tgt}_LIBRARY_RELEASE HDF4_${tgt}_LIBRARY_DEBUG )
 -    endforeach()
-+find_path(
-+  HDF4_INCLUDE_DIR NAMES "hdf.h"
-+  HINTS ${PC_Hdf4df_INCLUDE_DIRS})
- 
+-
 -    set(HDF4_LIBRARIES)
 -    foreach(_comp IN LISTS HDF4_COMPONENTS)
 -        if(HDF4_${_comp}_LIBRARY)
 -            list(APPEND HDF4_LIBRARIES "${HDF4_${_comp}_LIBRARY}")
 -        endif()
 -    endforeach()
--
++find_path(
++  HDF4_INCLUDE_DIR NAMES "hdf.h"
++  HINTS ${PC_Hdf4df_INCLUDE_DIRS})
+ 
 -    if(WIN32)
 -        find_library(WS2_32_LIBRARY ws2_32)
 -        if(WS2_32_LIBRARY)
@@ -559,6 +250,7 @@ index 1111111..2222222 100644
  
 -# set output variables
  if(HDF4_FOUND)
+   set(HDF4_INCLUDE_DIRS "${HDF4_INCLUDE_DIR}")
    if(NOT TARGET HDF4::HDF4)
 -      set(INCR 1)
 -      set(HDF4_TARGETS)
@@ -573,15 +265,14 @@ index 1111111..2222222 100644
 -
 -      add_library(HDF4::HDF4 INTERFACE IMPORTED)
 -      set_target_properties(HDF4::HDF4 PROPERTIES
--                            INTERFACE_INCLUDE_DIRECTORIES ${HDF4_INCLUDE_DIR}
+-                            INTERFACE_INCLUDE_DIRECTORIES ${HDF4_INCLUDE_DIRS}
 -                            INTERFACE_LINK_LIBRARIES "${HDF4_TARGETS}")
 +    add_library(HDF4::HDF4 INTERFACE IMPORTED)
 +    set_target_properties(HDF4::HDF4 PROPERTIES
-+                          INTERFACE_INCLUDE_DIRECTORIES ${HDF4_INCLUDE_DIR}
++                          INTERFACE_INCLUDE_DIRECTORIES ${HDF4_INCLUDE_DIRS}
 +                          INTERFACE_LINK_LIBRARIES "${HDF4_TARGETS}")
    endif()
  endif()
-+
 diff --git a/cmake/modules/packages/FindPostgreSQL.cmake b/cmake/modules/packages/FindPostgreSQL.cmake
 new file mode 100644
 index 0000000..61725fb
@@ -920,7 +611,7 @@ index 0000000..61725fb
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: brodieG <brodieG@users.noreply.github.com>
 Date: Sat, 12 Nov 2022 13:50:57 +0000
-Subject: [PATCH 5/5] Fix Find* for Blosc
+Subject: [PATCH 3/5] Fix Find* for Blosc
 
 
 diff --git a/cmake/modules/packages/FindBlosc.cmake b/cmake/modules/packages/FindBlosc.cmake
@@ -941,3 +632,312 @@ index 1111111..2222222 100644
 +    endif()
    endif()
  endif()
+
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: brodieG <brodieG@users.noreply.github.com>
+Date: Wed, 18 Jan 2023 10:58:02 +0000
+Subject: [PATCH 4/5] remove setting of __MSVCRT_CERSION__ (from OCTAVE)
+
+Originally:
+From: Jeremy Drake <github@jdrake.com>
+
+Date: Mon, 18 Oct 2021 11:02:08 -0700
+
+Subject: [PATCH] gdal: don't define __MSVCRT_VERSION__
+https://hg.octave.org/mxe-octave/file/tip/src/gdal-2-ucrt.patch
+
+diff --git a/port/cpl_port.h b/port/cpl_port.h
+index 1111111..2222222 100644
+--- a/port/cpl_port.h
++++ b/port/cpl_port.h
+@@ -114,15 +114,6 @@
+ /*      MinGW stuff                                                     */
+ /* ==================================================================== */
+ 
+-/* We need __MSVCRT_VERSION__ >= 0x0700 to have "_aligned_malloc" */
+-/* Latest versions of mingw32 define it, but with older ones, */
+-/* we need to define it manually */
+-#if defined(__MINGW32__)
+-#ifndef __MSVCRT_VERSION__
+-#define __MSVCRT_VERSION__ 0x0700
+-#endif
+-#endif
+-
+ /* Needed for std=c11 on Solaris to have strcasecmp() */
+ #if defined(GDAL_COMPILATION) && defined(__sun__) &&                           \
+     (__STDC_VERSION__ + 0) >= 201112L && (_XOPEN_SOURCE + 0) < 600
+
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: brodieG <brodieG@users.noreply.github.com>
+Date: Wed, 18 Jan 2023 10:58:42 +0000
+Subject: [PATCH 5/5] extend wmain use to C apps
+
+The change is patterned on what is done for the CPP apps
+
+diff --git a/apps/commonutils.h b/apps/commonutils.h
+index 1111111..2222222 100644
+--- a/apps/commonutils.h
++++ b/apps/commonutils.h
+@@ -80,7 +80,44 @@ extern "C" int wmain(int argc, wchar_t **argv_w, wchar_t ** /* envp */);
+ #define MAIN_END
+ 
+ #endif  // defined(WIN32)
+-#endif  // defined(__cplusplus)
++#else // defined(__cplusplus) ----------------------------------
++
++#if defined(WIN32) && (defined(_MSC_VER) || defined(SUPPORTS_WMAIN))
++
++#include <wchar.h>
++#include <stdlib.h>
++#include "cpl_conv.h"
++#include "cpl_string.h"
++
++int wmain( int argc, wchar_t ** argv_w, wchar_t ** envp );
++
++#define MAIN_START(argc, argv) \
++  int wmain( int argc, wchar_t ** argv_w, wchar_t **envp ) \
++  { \
++    char **argv = (char**)(CPLCalloc(argc + 1, sizeof(char*))); \
++    { \
++      int i; \
++      for( i = 0; i < argc; i++ ) \
++      { \
++        argv[i] = CPLRecodeFromWChar( argv_w[i], CPL_ENC_UCS2, CPL_ENC_UTF8 ); \
++      } \
++    }
++
++// NOTE: memory will not be explicitly freed on exit/return from wmain()
++
++#define MAIN_END CSLDestroy(argv); \
++    return 0; \
++  }
++
++#else // defined(WIN32)
++
++#define MAIN_START(argc, argv) \
++    int main(int argc, char **argv)
++
++#define MAIN_END
++
++#endif // defined(WIN32)
++#endif // (!__cplusplus__)
+ 
+ CPL_C_START
+ 
+diff --git a/apps/dumpoverviews.cpp b/apps/dumpoverviews.cpp
+index 1111111..2222222 100644
+--- a/apps/dumpoverviews.cpp
++++ b/apps/dumpoverviews.cpp
+@@ -31,6 +31,7 @@
+ #include "cpl_string.h"
+ #include "gdal_priv.h"
+ #include "ogr_spatialref.h"
++#include "commonutils.h"
+ 
+ static void DumpBand(GDALDatasetH hBaseDS, GDALRasterBandH hBand,
+                      const char *pszName);
+@@ -49,7 +50,7 @@ static void Usage()
+ /*                                main()                                */
+ /************************************************************************/
+ 
+-int main(int argc, char **argv)
++MAIN_START(argc, argv)
+ 
+ {
+     GDALAllRegister();
+@@ -184,6 +185,7 @@ int main(int argc, char **argv)
+ 
+     return 0;
+ }
++MAIN_END
+ 
+ /************************************************************************/
+ /*                              DumpBand()                              */
+diff --git a/apps/gdal2ogr.c b/apps/gdal2ogr.c
+index 1111111..2222222 100644
+--- a/apps/gdal2ogr.c
++++ b/apps/gdal2ogr.c
+@@ -31,6 +31,7 @@
+ #include "ogr_api.h"
+ #include "ogr_srs_api.h"
+ #include "cpl_string.h"
++#include "commonutils.h"
+ 
+ /************************************************************************/
+ /*                               Usage()                                */
+@@ -73,7 +74,7 @@ void Usage()
+ /*                                main()                                */
+ /************************************************************************/
+ 
+-int main(int argc, char *argv[])
++MAIN_START(argc, argv)
+ {
+     const char *pszFormat = "ESRI Shapefile";
+     char *pszLayerName = NULL;
+@@ -344,3 +345,4 @@ int main(int argc, char *argv[])
+ 
+     return 0;
+ }
++MAIN_END
+\ No newline at end of file
+diff --git a/apps/gdalasyncread.cpp b/apps/gdalasyncread.cpp
+index 1111111..2222222 100644
+--- a/apps/gdalasyncread.cpp
++++ b/apps/gdalasyncread.cpp
+@@ -32,6 +32,7 @@
+ #include "gdal_version.h"
+ #include "gdal_priv.h"
+ #include "ogr_spatialref.h"
++#include "commonutils.h"
+ 
+ /* ******************************************************************** */
+ /*                               Usage()                                */
+@@ -71,7 +72,7 @@ static void Usage()
+ /*                                main()                                */
+ /************************************************************************/
+ 
+-int main(int argc, char **argv)
++MAIN_START(argc, argv)
+ 
+ {
+     GDALDatasetH hSrcDS, hDstDS;
+@@ -561,3 +562,4 @@ int main(int argc, char **argv)
+     GDALDumpOpenDatasets(stderr);
+     GDALDestroyDriverManager();
+ }
++MAIN_END
+diff --git a/apps/gdalflattenmask.c b/apps/gdalflattenmask.c
+index 1111111..2222222 100644
+--- a/apps/gdalflattenmask.c
++++ b/apps/gdalflattenmask.c
+@@ -29,6 +29,7 @@
+ #include "gdal.h"
+ #include "cpl_conv.h"
+ #include "cpl_string.h"
++#include "commonutils.h"
+ 
+ /************************************************************************/
+ /*                               Usage()                                */
+@@ -59,7 +60,7 @@ static void Usage()
+ /*                                main()                                */
+ /************************************************************************/
+ 
+-int main(int argc, char *argv[])
++MAIN_START(argc, argv)
+ {
+     const char *pszFormat = "GTiff";
+     const char *pszSrcFilename = NULL;
+@@ -345,3 +346,4 @@ int main(int argc, char *argv[])
+ 
+     return 0;
+ }
++MAIN_END
+diff --git a/apps/gdaltorture.cpp b/apps/gdaltorture.cpp
+index 1111111..2222222 100644
+--- a/apps/gdaltorture.cpp
++++ b/apps/gdaltorture.cpp
+@@ -29,6 +29,7 @@
+ #include "gdal.h"
+ #include "cpl_string.h"
+ #include "cpl_conv.h"
++#include "commonutils.h"
+ 
+ #include <cassert>
+ 
+@@ -232,7 +233,7 @@ static void ProcessTortureTarget(const char *pszTarget, char **papszSiblingList,
+ /*                                main()                                */
+ /************************************************************************/
+ 
+-int main(int argc, char **argv)
++MAIN_START(argc, argv)
+ {
+     GDALAllRegister();
+ 
+@@ -287,3 +288,4 @@ int main(int argc, char **argv)
+ 
+     return 0;
+ }
++MAIN_END
+\ No newline at end of file
+diff --git a/apps/gdalwarpsimple.c b/apps/gdalwarpsimple.c
+index 1111111..2222222 100644
+--- a/apps/gdalwarpsimple.c
++++ b/apps/gdalwarpsimple.c
+@@ -31,6 +31,7 @@
+ #include "gdal_alg.h"
+ #include "cpl_string.h"
+ #include "ogr_srs_api.h"
++#include "commonutils.h"
+ 
+ static GDALDatasetH GDALWarpCreateOutput(GDALDatasetH hSrcDS,
+                                          const char *pszFilename,
+@@ -89,7 +90,7 @@ char *SanitizeSRS(const char *pszUserInput)
+ /*                                main()                                */
+ /************************************************************************/
+ 
+-int main(int argc, char **argv)
++MAIN_START(argc, argv)
+ 
+ {
+     GDALDatasetH hSrcDS, hDstDS;
+@@ -308,6 +309,7 @@ int main(int argc, char **argv)
+ 
+     exit(0);
+ }
++MAIN_END
+ 
+ /************************************************************************/
+ /*                        GDALWarpCreateOutput()                        */
+diff --git a/apps/multireadtest.cpp b/apps/multireadtest.cpp
+index 1111111..2222222 100644
+--- a/apps/multireadtest.cpp
++++ b/apps/multireadtest.cpp
+@@ -30,6 +30,7 @@
+ #include "gdal_alg.h"
+ #include "cpl_multiproc.h"
+ #include "cpl_string.h"
++#include "commonutils.h"
+ #include <vector>
+ 
+ static int nIterations = 1;
+@@ -119,8 +120,7 @@ static void WorkerFunc(void *arg)
+ /*                                main()                                */
+ /************************************************************************/
+ 
+-int main(int argc, char **argv)
+-
++MAIN_START(argc, argv)
+ {
+     /* -------------------------------------------------------------------- */
+     /*      Process arguments.                                              */
+@@ -252,3 +252,4 @@ int main(int argc, char **argv)
+ 
+     return 0;
+ }
++MAIN_END
+diff --git a/apps/testreprojmulti.cpp b/apps/testreprojmulti.cpp
+index 1111111..2222222 100644
+--- a/apps/testreprojmulti.cpp
++++ b/apps/testreprojmulti.cpp
+@@ -32,6 +32,7 @@
+ #include "cpl_atomic_ops.h"
+ #include "cpl_multiproc.h"
+ #include "ogr_spatialref.h"
++#include "commonutils.h"
+ 
+ double *padfRefX = nullptr;
+ double *padfRefY = nullptr;
+@@ -73,7 +74,7 @@ static void ReprojFunc(void * /* unused */)
+     }
+ }
+ 
+-int main(int argc, char *argv[])
++MAIN_START(argc, argv)
+ {
+     int nThreads = 2;
+ 
+@@ -118,3 +119,4 @@ int main(int argc, char *argv[])
+ 
+     return 0;
+ }
++MAIN_END

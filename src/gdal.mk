@@ -4,8 +4,8 @@ PKG             := gdal
 $(PKG)_WEBSITE  := https://www.gdal.org/
 $(PKG)_DESCR    := GDAL
 $(PKG)_IGNORE   :=
-$(PKG)_VERSION  := 3.6.0
-$(PKG)_CHECKSUM := f7afa4aa8d32d0799e011a9f573c6a67e9471f78e70d3d0d0b45b45c8c0c1a94
+$(PKG)_VERSION  := 3.6.2
+$(PKG)_CHECKSUM := 35f40d2e08061b342513cdcddc2b997b3814ef8254514f0ef1e8bc7aa56cf681
 $(PKG)_SUBDIR   := gdal-$($(PKG)_VERSION)
 $(PKG)_FILE     := gdal-$($(PKG)_VERSION).tar.xz
 $(PKG)_URL      := https://download.osgeo.org/gdal/$($(PKG)_VERSION)/$($(PKG)_FILE)
@@ -62,7 +62,10 @@ define $(PKG)_BUILD
         -DGDAL_USE_ZLIB:BOOL=ON \
         -DGDAL_USE_ZSTD:BOOL=ON \
         -DBUILD_SHARED_LIBS:BOOL=$(if $(BUILD_SHARED),ON,OFF) \
-        -DHDF5_USE_STATIC_LIBRARIES:BOOL=$(if $(BUILD_SHARED),OFF,ON)
+        -DHDF5_USE_STATIC_LIBRARIES:BOOL=$(if $(BUILD_SHARED),OFF,ON) \
+        -DBLA_STATIC=$(if $(BUILD_SHARED),OFF,ON) \
+        -DBLA_VENDOR="OpenBLAS" \
+        -DLAPACK_LIBRARIES="`'$(TARGET)-pkg-config' lapack --cflags --libs` -lgfortran -lquadmath"
 
     # Known not to work or disabled in previous versions
     # -DGDAL_USE_THREADS:BOOL=ON \
